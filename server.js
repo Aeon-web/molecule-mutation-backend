@@ -14,7 +14,7 @@ const client = new OpenAI({
 });
 
 app.get("/", (req, res) => {
-  res.json({ ok: true, message: "Molecule Mutation backend is running." });
+  res.json({ ok: true, message: "Molecule Mutation backend (chat) is running." });
 });
 
 app.post("/api/mutation-analysis", async (req, res) => {
@@ -27,13 +27,20 @@ app.post("/api/mutation-analysis", async (req, res) => {
   }
 
   try {
-    const response = await client.responses.create({
+    const completion = await client.chat.completions.create({
       model: "gpt-4.1-mini",
 
-      instructions:
-        "Given a base molecule and a structural mutation, explain how the change affects reactivity, acidity/basicity, steric effects, electronics, and intermediate stability. Compare mechanisms before/after. Respond ONLY in JSON matching the schema.",
-
-      input: [
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are an expert organic chemistry tutor. " +
+            "Given a base molecule and a structural mutation, explain qualitatively how this affects: " +
+            "reactivity, acidity/basicity, steric effects, electronic effects, and stability of intermediates. " +
+            "Compare likely mechanisms before and after the mutation, and give at least one concrete example reaction. " +
+            "Assume the user is at undergraduate organic chemistry level. " +
+            "Respond ONLY with valid JSON that matches the provided JSON schema.",
+        },
         {
           role: "user",
           content: JSON.stringify({
@@ -44,82 +51,83 @@ app.post("/api/mutation-analysis", async (req, res) => {
         },
       ],
 
-      // ✅ New Responses API syntax
-      text: {
-        format: "json_schema",
-        schema: {
-          type: "object",
-          properties: {
-            summary: { type: "string" },
-            key_changes: {
-              type: "object",
-              properties: {
-                reactivity: { type: "string" },
-                acidity_basicity: { type: "string" },
-                sterics: { type: "string" },
-                electronics: { type: "string" },
-                intermediate_stability: { type: "string" },
-              },
-              required: [
-                "reactivity",
-                "acidity_basicity",
-                "sterics",
-                "electronics",
-                "intermediate_stability",
-              ],
-            },
-            mechanisms: {
-              type: "object",
-              properties: {
-                before: { type: "string" },
-                after: { type: "string" },
-                comparison: { type: "string" },
-              },
-              required: ["before", "after", "comparison"],
-            },
-            example_reactions: {
-              type: "array",
-              items: {
+      // ✅ JSON schema via Chat Completions (this is allowed here)
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "mutation_analysis",
+          schema: {
+            type: "object",
+            properties: {
+              summary: { type: "string" },
+              key_changes: {
                 type: "object",
                 properties: {
-                  description: { type: "string" },
-                  before_mutation_outcome: { type: "string" },
-                  after_mutation_outcome: { type: "string" },
+                  reactivity: { type: "string" },
+                  acidity_basicity: { type: "string" },
+                  sterics: { type: "string" },
+                  electronics: { type: "string" },
+                  intermediate_stability: { type: "string" },
                 },
                 required: [
-                  "description",
-                  "before_mutation_outcome",
-                  "after_mutation_outcome",
+                  "reactivity",
+                  "acidity_basicity",
+                  "sterics",
+                  "electronics",
+                  "intermediate_stability",
                 ],
               },
-            },
-            explanation_levels: {
-              type: "object",
-              properties: {
-                simple: { type: "string" },
-                detailed: { type: "string" },
+              mechanisms: {
+                type: "object",
+                properties: {
+                  before: { type: "string" },
+                  after: { type: "string" },
+                  comparison: { type: "string" },
+                },
+                required: ["before", "after", "comparison"],
               },
-              required: ["simple", "detailed"],
+              example_reactions: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    description: { type: "string" },
+                    before_mutation_outcome: { type: "string" },
+                    after_mutation_outcome: { type: "string" },
+                  },
+                  required: [
+                    "description",
+                    "before_mutation_outcome",
+                    "after_mutation_outcome",
+                  ],
+                },
+              },
+              explanation_levels: {
+                type: "object",
+                properties: {
+                  simple: { type: "string" },
+                  detailed: { type: "string" },
+                },
+                required: ["simple", "detailed"],
+              },
             },
+            required: [
+              "summary",
+              "key_changes",
+              "mechanisms",
+              "example_reactions",
+              "explanation_levels",
+            ],
           },
-          required: [
-            "summary",
-            "key_changes",
-            "mechanisms",
-            "example_reactions",
-            "explanation_levels",
-          ],
+          strict: true,
         },
-        strict: true,
       },
     });
 
-    // 🔑 Safer extraction of the JSON text
-    const text = response.output[0].content[0].text;
-    const data = JSON.parse(text);
+    const raw = completion.choices[0].message.content;
+    const data = JSON.parse(raw);
 
     res.json(data);
-
   } catch (err) {
     console.error("Mutation analysis error:", err);
 
