@@ -140,10 +140,21 @@ app.post("/api/mutation-analysis", async (req, res) => {
 
     res.json(data);
   } catch (err) {
-    console.error("Mutation analysis error:", err?.response?.data || err);
+    // Improved error logging
+    console.error("Mutation analysis error raw:", err);
+
+    let message = "Unknown error contacting OpenAI.";
+    // If OpenAI returned a structured error
+    if (err.response?.data?.error?.message) {
+      message = err.response.data.error.message;
+    } else if (err.message) {
+      // Fallback to generic error message
+      message = err.message;
+    }
+
     res.status(500).json({
       error: "Failed to analyze mutation.",
-      details: err?.message || "Unknown error",
+      message, // <-- frontend will show this
     });
   }
 });
@@ -152,4 +163,3 @@ app.post("/api/mutation-analysis", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Molecule Mutation backend listening on port ${PORT}`);
 });
-
