@@ -44,7 +44,7 @@ app.post("/api/mutation-analysis", async (req, res) => {
         },
       ],
 
-      // ✅ CORRECT NEW SYNTAX
+      // ✅ New Responses API syntax
       text: {
         format: "json_schema",
         schema: {
@@ -114,7 +114,10 @@ app.post("/api/mutation-analysis", async (req, res) => {
       },
     });
 
-    const data = JSON.parse(response.output_text);
+    // 🔑 Safer extraction of the JSON text
+    const text = response.output[0].content[0].text;
+    const data = JSON.parse(text);
+
     res.json(data);
 
   } catch (err) {
@@ -133,4 +136,3 @@ app.post("/api/mutation-analysis", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Molecule Mutation backend listening on port ${PORT}`);
 });
-
