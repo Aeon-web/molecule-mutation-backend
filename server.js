@@ -21,9 +21,9 @@ app.post("/api/mutation-analysis", async (req, res) => {
   const { base_molecule, mutation, question } = req.body || {};
 
   if (!base_molecule || !mutation) {
-    return res.status(400).json({
-      error: "base_molecule and mutation are required.",
-    });
+    return res
+      .status(400)
+      .json({ error: "base_molecule and mutation are required." });
   }
 
   try {
@@ -31,11 +31,7 @@ app.post("/api/mutation-analysis", async (req, res) => {
       model: "gpt-4.1-mini",
 
       instructions:
-        "You are an expert organic chemistry tutor. " +
-        "Given a base molecule and a structural mutation, explain qualitatively how this affects " +
-        "reactivity, acidity/basicity, steric effects, electronic effects, and intermediate stability. " +
-        "Compare likely mechanisms before and after the mutation and give at least one example reaction. " +
-        "Respond ONLY with valid JSON matching the schema.",
+        "Given a base molecule and a structural mutation, explain how the change affects reactivity, acidity/basicity, steric effects, electronics, and intermediate stability. Compare mechanisms before/after. Respond ONLY in JSON matching the schema.",
 
       input: [
         {
@@ -48,7 +44,7 @@ app.post("/api/mutation-analysis", async (req, res) => {
         },
       ],
 
-      // ✅ NEW RESPONSES API FORMAT (correct)
+      // ✅ CORRECT NEW SYNTAX
       text: {
         format: "json_schema",
         schema: {
@@ -118,21 +114,18 @@ app.post("/api/mutation-analysis", async (req, res) => {
       },
     });
 
-    // NEW OUTPUT FIELD
     const data = JSON.parse(response.output_text);
-
     res.json(data);
+
   } catch (err) {
     console.error("Mutation analysis error:", err);
 
-    const message =
-      err.response?.data?.error?.message ||
-      err.message ||
-      "Unknown error contacting OpenAI.";
-
     res.status(500).json({
       error: "Failed to analyze mutation.",
-      message,
+      message:
+        err?.response?.data?.error?.message ||
+        err.message ||
+        "Unknown server error",
     });
   }
 });
