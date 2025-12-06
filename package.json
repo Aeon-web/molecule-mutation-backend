@@ -1,6 +1,7 @@
 {
   "name": "molecule-mutation-backend",
   "version": "1.0.0",
+  "description": "API for the Molecule Mutation Generator – explains how structural changes affect reactivity and mechanisms.",
   "type": "module",
   "main": "server.js",
   "scripts": {
