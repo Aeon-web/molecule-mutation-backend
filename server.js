@@ -1,3 +1,4 @@
+// server.js
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
@@ -9,11 +10,12 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Initialize OpenAI client
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Simple health check
+// Health check
 app.get("/", (req, res) => {
   res.json({
     ok: true,
@@ -21,6 +23,7 @@ app.get("/", (req, res) => {
   });
 });
 
+// Main mutation analysis endpoint
 app.post("/api/mutation-analysis", async (req, res) => {
   const { base_molecule, mutation, question } = req.body || {};
 
@@ -59,10 +62,13 @@ app.post("/api/mutation-analysis", async (req, res) => {
           name: "mutation_analysis",
           schema: {
             type: "object",
+            additionalProperties: false,
             properties: {
               summary: { type: "string" },
+
               key_changes: {
                 type: "object",
+                additionalProperties: false,
                 properties: {
                   reactivity: { type: "string" },
                   acidity_basicity: { type: "string" },
@@ -78,8 +84,10 @@ app.post("/api/mutation-analysis", async (req, res) => {
                   "intermediate_stability",
                 ],
               },
+
               mechanisms: {
                 type: "object",
+                additionalProperties: false,
                 properties: {
                   before: { type: "string" },
                   after: { type: "string" },
@@ -87,10 +95,12 @@ app.post("/api/mutation-analysis", async (req, res) => {
                 },
                 required: ["before", "after", "comparison"],
               },
+
               example_reactions: {
                 type: "array",
                 items: {
                   type: "object",
+                  additionalProperties: false,
                   properties: {
                     description: { type: "string" },
                     before_mutation_outcome: { type: "string" },
@@ -103,8 +113,10 @@ app.post("/api/mutation-analysis", async (req, res) => {
                   ],
                 },
               },
+
               explanation_levels: {
                 type: "object",
+                additionalProperties: false,
                 properties: {
                   simple: { type: "string" },
                   detailed: { type: "string" },
@@ -125,20 +137,34 @@ app.post("/api/mutation-analysis", async (req, res) => {
       },
     });
 
-    const rawContent = completion.choices[0]?.message?.content;
+    const rawContent = completion.choices?.[0]?.message?.content;
 
-    // content should already be valid JSON (string) because of response_format
-    const data = typeof rawContent === "string" ? JSON.parse(rawContent) : rawContent;
+    if (!rawContent) {
+      throw new Error("No content returned from OpenAI.");
+    }
+
+    let data;
+    try {
+      data = JSON.parse(rawContent);
+    } catch (parseErr) {
+      console.error("JSON parse error from model:", parseErr, "Raw:", rawContent);
+      throw new Error(
+        "Failed to parse JSON from model. Check schema / response_format."
+      );
+    }
 
     return res.json(data);
   } catch (err) {
-    console.error("Mutation analysis error:", err?.response?.data || err);
+    console.error(
+      "Mutation analysis error:",
+      err?.response?.data || err.message || err
+    );
 
     return res.status(500).json({
       error: "Failed to analyze mutation.",
       message:
         err?.response?.data?.error?.message ||
-        err?.message ||
+        err.message ||
         "Unknown server error",
     });
   }
