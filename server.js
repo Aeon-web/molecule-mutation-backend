@@ -123,6 +123,7 @@ app.post("/api/mutation-analysis", async (req, res) => {
                 additionalProperties: false,
               },
 
+              // IUPAC names for before / after mutation
               iupac_names: {
                 type: "object",
                 properties: {
@@ -130,11 +131,12 @@ app.post("/api/mutation-analysis", async (req, res) => {
                   after: { type: "string" },
                   notes: { type: "string" },
                 },
-                required: ["before", "after"],
+                // 🔧 required must include EVERY key in properties
+                required: ["before", "after", "notes"],
                 additionalProperties: false,
               },
 
-              // 🆕 predicted structures
+              // Predicted structures (SMILES)
               structures: {
                 type: "object",
                 properties: {
@@ -142,7 +144,12 @@ app.post("/api/mutation-analysis", async (req, res) => {
                   mutated_smiles_guess: { type: "string" },
                   notes: { type: "string" },
                 },
-                required: ["mutated_smiles_guess"],
+                // 🔧 same rule: all keys must be required
+                required: [
+                  "base_smiles_guess",
+                  "mutated_smiles_guess",
+                  "notes",
+                ],
                 additionalProperties: false,
               },
             },
@@ -181,4 +188,3 @@ app.post("/api/mutation-analysis", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Molecule Mutation backend listening on port ${PORT}`);
 });
-
