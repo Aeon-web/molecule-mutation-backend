@@ -1,4 +1,3 @@
-// server.js
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
@@ -14,7 +13,6 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Health check
 app.get("/", (req, res) => {
   res.json({
     ok: true,
@@ -22,7 +20,6 @@ app.get("/", (req, res) => {
   });
 });
 
-// Main mutation analysis endpoint
 app.post("/api/mutation-analysis", async (req, res) => {
   const { base_molecule, mutation, question } = req.body || {};
 
@@ -40,16 +37,14 @@ app.post("/api/mutation-analysis", async (req, res) => {
           role: "system",
           content:
             "You are an expert organic chemistry tutor. " +
-            "You MUST respond with a single JSON object only, no extra text. " +
-            "The JSON must have exactly these fields:\n" +
-            "  - summary (string)\n" +
-            "  - key_changes (object) with fields:\n" +
-            "      reactivity, acidity_basicity, sterics, electronics, intermediate_stability (all strings)\n" +
-            "  - mechanisms (object) with fields: before, after, comparison (all strings)\n" +
-            "  - example_reactions (array of objects), each with:\n" +
-            "      description, before_mutation_outcome, after_mutation_outcome (strings)\n" +
-            "  - explanation_levels (object) with fields: simple, detailed (strings)\n" +
-            "Do not include any fields other than those listed above.",
+            "Given a base molecule and a structural mutation, you MUST:\n" +
+            "1) Explain qualitatively how this affects: reactivity, acidity/basicity, steric effects, electronic effects, and stability of intermediates.\n" +
+            "2) Compare likely mechanisms before and after the mutation, and give at least one concrete example reaction.\n" +
+            "3) Provide IUPAC names for the molecule before and after the mutation (best reasonable guess; if ambiguous, say so in notes).\n" +
+            "4) Provide a best-guess SMILES for the main product after the mutation, and if possible a SMILES guess for the starting molecule. " +
+            "Return these in a 'structures' object with keys: base_smiles_guess, mutated_smiles_guess, notes.\n" +
+            "Assume the user is at undergraduate organic chemistry level. " +
+            "Respond ONLY with valid JSON that matches the provided JSON schema.",
         },
         {
           role: "user",
@@ -60,36 +55,120 @@ app.post("/api/mutation-analysis", async (req, res) => {
           }),
         },
       ],
-      // Simpler JSON mode – no schema validator, but guarantees a JSON object
       response_format: {
-        type: "json_object",
+        type: "json_schema",
+        json_schema: {
+          name: "mutation_analysis",
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              summary: { type: "string" },
+
+              key_changes: {
+                type: "object",
+                properties: {
+                  reactivity: { type: "string" },
+                  acidity_basicity: { type: "string" },
+                  sterics: { type: "string" },
+                  electronics: { type: "string" },
+                  intermediate_stability: { type: "string" },
+                },
+                required: [
+                  "reactivity",
+                  "acidity_basicity",
+                  "sterics",
+                  "electronics",
+                  "intermediate_stability",
+                ],
+                additionalProperties: false,
+              },
+
+              mechanisms: {
+                type: "object",
+                properties: {
+                  before: { type: "string" },
+                  after: { type: "string" },
+                  comparison: { type: "string" },
+                },
+                required: ["before", "after", "comparison"],
+                additionalProperties: false,
+              },
+
+              example_reactions: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    description: { type: "string" },
+                    before_mutation_outcome: { type: "string" },
+                    after_mutation_outcome: { type: "string" },
+                  },
+                  required: [
+                    "description",
+                    "before_mutation_outcome",
+                    "after_mutation_outcome",
+                  ],
+                  additionalProperties: false,
+                },
+              },
+
+              explanation_levels: {
+                type: "object",
+                properties: {
+                  simple: { type: "string" },
+                  detailed: { type: "string" },
+                },
+                required: ["simple", "detailed"],
+                additionalProperties: false,
+              },
+
+              iupac_names: {
+                type: "object",
+                properties: {
+                  before: { type: "string" },
+                  after: { type: "string" },
+                  notes: { type: "string" },
+                },
+                required: ["before", "after"],
+                additionalProperties: false,
+              },
+
+              // 🆕 predicted structures
+              structures: {
+                type: "object",
+                properties: {
+                  base_smiles_guess: { type: "string" },
+                  mutated_smiles_guess: { type: "string" },
+                  notes: { type: "string" },
+                },
+                required: ["mutated_smiles_guess"],
+                additionalProperties: false,
+              },
+            },
+            required: [
+              "summary",
+              "key_changes",
+              "mechanisms",
+              "example_reactions",
+              "explanation_levels",
+              "iupac_names",
+              "structures",
+            ],
+          },
+          strict: true,
+        },
       },
     });
 
-    const rawContent = completion.choices?.[0]?.message?.content;
+    const raw = completion.choices[0].message.content;
+    const data = JSON.parse(raw);
 
-    if (!rawContent) {
-      throw new Error("No content returned from OpenAI.");
-    }
-
-    let data;
-    try {
-      data = JSON.parse(rawContent);
-    } catch (parseErr) {
-      console.error("JSON parse error from model:", parseErr, "Raw:", rawContent);
-      throw new Error(
-        "Failed to parse JSON from model in json_object mode."
-      );
-    }
-
-    return res.json(data);
+    res.json(data);
   } catch (err) {
-    console.error(
-      "Mutation analysis error:",
-      err?.response?.data || err.message || err
-    );
+    console.error("Mutation analysis error:", err);
 
-    return res.status(500).json({
+    res.status(500).json({
       error: "Failed to analyze mutation.",
       message:
         err?.response?.data?.error?.message ||
