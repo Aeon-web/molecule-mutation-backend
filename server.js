@@ -13,8 +13,12 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Simple health check
 app.get("/", (req, res) => {
-  res.json({ ok: true, message: "Molecule Mutation backend (chat) is running." });
+  res.json({
+    ok: true,
+    message: "Molecule Mutation backend (chat) is running.",
+  });
 });
 
 app.post("/api/mutation-analysis", async (req, res) => {
@@ -29,7 +33,6 @@ app.post("/api/mutation-analysis", async (req, res) => {
   try {
     const completion = await client.chat.completions.create({
       model: "gpt-4.1-mini",
-
       messages: [
         {
           role: "system",
@@ -50,8 +53,6 @@ app.post("/api/mutation-analysis", async (req, res) => {
           }),
         },
       ],
-
-      // ✅ JSON schema via Chat Completions (this is allowed here)
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -124,18 +125,20 @@ app.post("/api/mutation-analysis", async (req, res) => {
       },
     });
 
-    const raw = completion.choices[0].message.content;
-    const data = JSON.parse(raw);
+    const rawContent = completion.choices[0]?.message?.content;
 
-    res.json(data);
+    // content should already be valid JSON (string) because of response_format
+    const data = typeof rawContent === "string" ? JSON.parse(rawContent) : rawContent;
+
+    return res.json(data);
   } catch (err) {
-    console.error("Mutation analysis error:", err);
+    console.error("Mutation analysis error:", err?.response?.data || err);
 
-    res.status(500).json({
+    return res.status(500).json({
       error: "Failed to analyze mutation.",
       message:
         err?.response?.data?.error?.message ||
-        err.message ||
+        err?.message ||
         "Unknown server error",
     });
   }
@@ -144,3 +147,4 @@ app.post("/api/mutation-analysis", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Molecule Mutation backend listening on port ${PORT}`);
 });
+
