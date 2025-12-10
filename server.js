@@ -16,7 +16,7 @@ const client = new OpenAI({
 
 // ✅ NEW: point this to your live RDKit Render URL
 // Example: "https://molecule-rdkit-api.onrender.com"
-const RDKIT_API = "https://YOUR-RDKIT-SERVICE.onrender.com";
+const RDKIT_API = "https://molecule-rdkit-api.onrender.com"
 
 /**
  * ✅ Helper: validate a SMILES string using your RDKit microservice
