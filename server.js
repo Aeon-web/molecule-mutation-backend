@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import "dotenv/config";
 import OpenAI from "openai";
+import axios from "axios"; // ✅ NEW: for calling RDKit API
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,6 +13,30 @@ app.use(express.json());
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+// ✅ NEW: point this to your live RDKit Render URL
+// Example: "https://molecule-rdkit-api.onrender.com"
+const RDKIT_API = "https://YOUR-RDKIT-SERVICE.onrender.com";
+
+/**
+ * ✅ Helper: validate a SMILES string using your RDKit microservice
+ * Returns: { valid: boolean, canonical_smiles?: string, error?: string }
+ */
+async function validateSmiles(smiles) {
+  if (!smiles || typeof smiles !== "string") {
+    return { valid: false, error: "No SMILES provided" };
+  }
+
+  try {
+    const response = await axios.post(`${RDKIT_API}/validate-smiles`, {
+      smiles,
+    });
+    return response.data;
+  } catch (err) {
+    console.error("RDKit API Error:", err.message);
+    return { valid: false, error: "RDKit service error" };
+  }
+}
 
 app.get("/", (req, res) => {
   res.json({
@@ -131,7 +156,6 @@ app.post("/api/mutation-analysis", async (req, res) => {
                   after: { type: "string" },
                   notes: { type: "string" },
                 },
-                // 🔧 required must include EVERY key in properties
                 required: ["before", "after", "notes"],
                 additionalProperties: false,
               },
@@ -144,7 +168,6 @@ app.post("/api/mutation-analysis", async (req, res) => {
                   mutated_smiles_guess: { type: "string" },
                   notes: { type: "string" },
                 },
-                // 🔧 same rule: all keys must be required
                 required: [
                   "base_smiles_guess",
                   "mutated_smiles_guess",
@@ -171,7 +194,49 @@ app.post("/api/mutation-analysis", async (req, res) => {
     const raw = completion.choices[0].message.content;
     const data = JSON.parse(raw);
 
-    res.json(data);
+    // ✅ NEW: pull the AI's mutated SMILES guess
+    const mutatedSmilesGuess = data?.structures?.mutated_smiles_guess || null;
+    const baseSmilesGuess = data?.structures?.base_smiles_guess || null;
+
+    // ✅ NEW: validate mutated SMILES via RDKit
+    const rdkitResult = await validateSmiles(mutatedSmilesGuess);
+
+    // If RDKit says it's invalid, return a 400 with details,
+    // but still include the original AI analysis so the user can see it.
+    if (!rdkitResult.valid) {
+      return res.status(400).json({
+        ok: false,
+        error: "RDKit rejected the mutated SMILES prediction.",
+        rdkit_error: rdkitResult.error,
+        ai_structures: data.structures,
+        analysis: {
+          summary: data.summary,
+          key_changes: data.key_changes,
+          mechanisms: data.mechanisms,
+          example_reactions: data.example_reactions,
+          explanation_levels: data.explanation_levels,
+          iupac_names: data.iupac_names,
+        },
+      });
+    }
+
+    // ✅ If valid, attach canonical SMILES and return everything
+    const responsePayload = {
+      ok: true,
+      canonical_structures: {
+        mutated_smiles_canonical: rdkitResult.canonical_smiles,
+        base_smiles_guess: baseSmilesGuess,
+      },
+      ai_structures: data.structures,
+      summary: data.summary,
+      key_changes: data.key_changes,
+      mechanisms: data.mechanisms,
+      example_reactions: data.example_reactions,
+      explanation_levels: data.explanation_levels,
+      iupac_names: data.iupac_names,
+    };
+
+    res.json(responsePayload);
   } catch (err) {
     console.error("Mutation analysis error:", err);
 
